@@ -1,20 +1,76 @@
+use dotenv::dotenv;
 use serenity::{
-    client::{Client, Context, EventHandler},
-    model::gateway::Ready,
+    client::{bridge::voice::ClientVoiceManager, Client, Context, EventHandler},
+    framework::StandardFramework,
+    model::{
+        gateway::{Activity, Ready},
+        id::UserId,
+        prelude::OnlineStatus,
+    },
+    prelude::*,
 };
+use std::{env, sync::Arc};
+
+mod commands;
+
+use commands::{GENERAL_GROUP, HELP};
 
 struct Handler;
 
 impl EventHandler for Handler {
-    fn ready(&self, _: Context, ready: Ready) {
+    fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.tag());
+        ctx.set_presence(Some(Activity::listening("cum")), OnlineStatus::Online);
     }
 }
 
-const DISCORD_TOKEN: &str = include_str!("token");
+pub struct VoiceManager;
+
+impl TypeMapKey for VoiceManager {
+    type Value = Arc<Mutex<ClientVoiceManager>>;
+}
 
 fn main() {
-    let mut client = Client::new(&DISCORD_TOKEN, Handler).expect("Failed to create the client");
+    // Load the .env file into the environment
+    dotenv().ok();
 
+    // Gets discord token from the enviroment
+    let discord_token = env::var("DISCORD_TOKEN").expect("Env variable DISCORD_TOKEN NOT FOUND");
+
+    // Creates the client and errors if it fails
+    let mut client = Client::new(&discord_token, Handler).expect("Failed to create the client");
+
+    {
+        let mut data = client.data.write();
+        data.insert::<VoiceManager>(Arc::clone(&client.voice_manager));
+    }
+
+    // Setup the command framework
+    client.with_framework(
+        StandardFramework::new()
+            .configure(|c| {
+                c.prefix("!").owners(
+                    //               Elliot                       Zach
+                    vec![UserId(272727593881567242), UserId(168827261682843648)]
+                        .into_iter()
+                        .collect(),
+                )
+            })
+            .group(&GENERAL_GROUP)
+            .help(&HELP),
+    );
+
+    // Setup smooth shutdown
+    {
+        let shard_manager = Arc::clone(&client.shard_manager);
+
+        ctrlc::set_handler(move || {
+            println!("Shutting down now");
+            shard_manager.lock().shutdown_all();
+        })
+        .expect("Failed to enable the ctrl+c handler");
+    }
+
+    // Starts client
     client.start().expect("Error running the client");
 }

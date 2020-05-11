@@ -9,3 +9,5 @@ publish = false
 
 [dependencies]
 serenity = { version = "0.8.6", features = ["cache", "framework", "standard_framework", "voice"] }
+dotenv = "0.15.0"
+ctrlc = "3.1.4"
