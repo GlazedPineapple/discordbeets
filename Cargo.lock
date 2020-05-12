@@ -210,6 +210,8 @@ version = "0.1.0"
 dependencies = [
  "ctrlc",
  "dotenv",
+ "serde",
+ "serde_json",
  "serenity",
 ]
 

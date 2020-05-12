@@ -12,6 +12,7 @@ use serenity::{
 use std::{env, sync::Arc};
 
 mod commands;
+mod ytdl;
 
 use commands::{GENERAL_GROUP, HELP, VOICE_GROUP};
 

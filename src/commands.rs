@@ -1,3 +1,4 @@
+use crate::ytdl;
 use crate::VoiceManager;
 use serenity::{
     framework::standard::{
@@ -7,7 +8,6 @@ use serenity::{
     },
     model::{channel::Message, id::UserId, misc::Mentionable},
     prelude::Context,
-    voice
 };
 use std::collections::HashSet;
 
@@ -28,9 +28,8 @@ fn help(
 /// The general command group
 struct General;
 
-
 #[group]
-#[commands(join, leave, play)]
+#[commands(join, leave, play /*, search */)]
 /// The voice commands
 struct Voice;
 
@@ -144,7 +143,8 @@ fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
         url if url.starts_with("http") => url,
         // url => youtube search here to get url,
         _ => {
-            msg.channel_id.say(&ctx, "Must provide a valid URL to video or audio")?;
+            msg.channel_id
+                .say(&ctx, "Must provide a valid URL to video or audio")?;
 
             return Ok(());
         }
@@ -162,16 +162,16 @@ fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
 
     // Access the voice manager mutex
     let manager_lock = ctx
-      .data
-      .read()
-      .get::<VoiceManager>()
-      .cloned()
-      .expect("Expected voice manager in share map");
+        .data
+        .read()
+        .get::<VoiceManager>()
+        .cloned()
+        .expect("Expected voice manager in share map");
     // Gain a lock on the mutex
     let mut manager = manager_lock.lock();
 
     if let Some(handler) = manager.get_mut(guild_id) {
-        let source = match voice::ytdl(url) {
+        let source = match ytdl::stream_url(url) {
             Ok(source) => source,
             Err(why) => {
                 eprintln!("Error with youtube-dl: {:?}", why);
@@ -181,7 +181,8 @@ fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
                 return Ok(());
             }
         };
-        
+
+        handler.play(source);
         // let audio = handler.play_returning(source);
         // audio.lock().volume(0.5);
 
