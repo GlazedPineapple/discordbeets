@@ -13,7 +13,7 @@ use std::{env, sync::Arc};
 
 mod commands;
 
-use commands::{GENERAL_GROUP, HELP};
+use commands::{GENERAL_GROUP, HELP, VOICE_GROUP};
 
 struct Handler;
 
@@ -57,6 +57,7 @@ fn main() {
                 )
             })
             .group(&GENERAL_GROUP)
+            .group(&VOICE_GROUP)
             .help(&HELP),
     );
 
