@@ -7,7 +7,7 @@ use serenity::{
         id::UserId,
         prelude::OnlineStatus,
     },
-    prelude::*,
+    prelude::*, utils::Color,
 };
 use std::{env, sync::Arc};
 
@@ -59,7 +59,23 @@ fn main() {
             })
             .group(&GENERAL_GROUP)
             .group(&VOICE_GROUP)
-            .help(&HELP),
+            .help(&HELP)
+            .after(|ctx, msg, cmd_name, error| {
+                // Print out error if/when it occurs
+                if let Err(why) = error {
+                    println!("Error in {}: {:?}", cmd_name, why);
+                    msg.channel_id.send_message(&ctx, |m| {
+                        m.embed(|e| {
+                            e.title(format!("Error in `{}`", cmd_name))
+                                .description(format!(
+                                    "Encountered an error while executing `{}`.\n```rs\n{:?}```",
+                                    cmd_name, why
+                                ))
+                                .color(Color::DARK_RED)
+                        })
+                    }).ok();
+                }
+            }),
     );
 
     // Setup smooth shutdown

@@ -29,9 +29,36 @@ fn help(
 struct General;
 
 #[group]
-#[commands(join, leave, play /*, search */)]
+#[commands(join, leave, play, stop /*, search */)]
 /// The voice commands
 struct Voice;
+
+#[command]
+fn stop(ctx: &mut Context, msg: &Message) -> CommandResult {
+    let manager_lock = ctx
+        .data
+        .read()
+        .get::<VoiceManager>()
+        .cloned()
+        .expect("Expected voice manager in share map");
+    // Gain a lock on the mutex
+    let mut manager = manager_lock.lock();
+
+    let guild_id = match msg.guild_id {
+        Some(id) => id,
+        None => {
+            msg.channel_id.say(&ctx, "Groups and DMs not supported")?;
+
+            return Ok(());
+        }
+    };
+    
+    if let Some(handler) = manager.get_mut(guild_id) {
+        handler.stop();
+    }
+
+    Ok(())
+}
 
 #[command]
 /// Ping the bot
