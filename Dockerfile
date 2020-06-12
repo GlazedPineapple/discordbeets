@@ -14,7 +14,7 @@ WORKDIR /app
 COPY --from=builder /app/target/release/discordbeets /app
 
 # Deps
-RUN apt update && apt install ffmpeg curl -y
+RUN apt update && apt install ffmpeg curl python -y
 RUN curl -L https://yt-dl.org/downloads/latest/youtube-dl -o /usr/local/bin/youtube-dl && chmod a+rx /usr/local/bin/youtube-dl
 
 CMD ["/app/discordbeets"]
