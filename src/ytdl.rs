@@ -5,9 +5,11 @@ use serenity::{
 };
 use std::{
     boxed::Box,
-    io::{self, ErrorKind},
+    io::{self, ErrorKind, Read},
     process::Command,
+    process::Stdio,
 };
+use thiserror::Error;
 
 #[cfg(test)]
 mod test {
@@ -34,22 +36,41 @@ mod test {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum YtdlError {
+    #[error("Failed to start youtube-dl. is it installed?")]
+    NotInstalled,
+    #[error("Failed to start youtube-dl or ffmpeg. are they installed?")]
+    NotInstalledFfmpeg,
+    #[error("Encountered an error while running youtube-dl: {0}")]
+    Runtime(String),
+    #[error(transparent)]
+    Json(#[from] serde_json::error::Error),
+    #[error(transparent)]
+    Serenity(#[from] SerenityError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error(transparent)]
+    Utf8(#[from] std::string::FromUtf8Error),
+}
+type Result<T> = std::result::Result<T, YtdlError>;
+
 /// Map a ytdl spawn error to a serenity error
-fn map_ytdl_spawn_err(err: io::Error) -> SerenityError {
+fn map_ytdl_spawn_err(err: io::Error) -> YtdlError {
     match err.kind() {
-        ErrorKind::NotFound => SerenityError::Other("youtube-dl is not installed"),
+        ErrorKind::NotFound => YtdlError::NotInstalled,
         _ => err.into(),
     }
 }
 
 /// Wrapper around serenity::voice::ytdl
-pub fn stream_url(url: &str) -> serenity::Result<Box<dyn AudioSource>> {
+pub fn stream_url(url: &str) -> Result<Box<dyn AudioSource>> {
     ytdl(url).map_err(|err| match &err {
         SerenityError::Io(e) => match e.kind() {
-            ErrorKind::NotFound => SerenityError::Other("youtube-dl or ffmpeg is not installed"),
-            _ => err,
+            ErrorKind::NotFound => YtdlError::NotInstalledFfmpeg,
+            _ => YtdlError::from(err),
         },
-        _ => err,
+        _ => YtdlError::from(err),
     })
 }
 
@@ -57,49 +78,96 @@ pub fn stream_url(url: &str) -> serenity::Result<Box<dyn AudioSource>> {
 /// Metadata about a ytdl source
 pub struct YtdlMetadata {
     /// The date of the upload in YYYYMMDD
-    upload_date: String,
+    pub upload_date: String,
     /// The title of the video
-    title: String,
+    pub title: String,
     /// The full title of the video
-    fulltitle: String,
+    pub fulltitle: String,
     /// The current view count
-    view_count: u32,
+    pub view_count: u32,
     /// The video description
-    description: String,
+    pub description: String,
     /// The name of the video uploader
-    uploader: String,
+    pub uploader: String,
     /// The thumbnail of the video
-    thumbnail: String,
+    pub thumbnail: String,
     /// The url to the video
-    webpage_url: String,
+    pub webpage_url: String,
     /// The url to the uploader's page
-    uploader_url: String,
+    pub uploader_url: String,
     /// The duration of the video
-    duration: u32,
+    pub duration: u32,
 }
 
 /// Get the metatdata for a url from ytdl
-pub fn metadata(url: &str) -> serenity::Result<YtdlMetadata> {
-    let youtube_dl = Command::new("youtube-dl")
+pub fn metadata(url: &str) -> Result<YtdlMetadata> {
+    let mut youtube_dl = Command::new("youtube-dl")
         .args(&["-j", "--no-playlist", "--ignore-config", url])
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(map_ytdl_spawn_err)?;
 
-    let json_result = String::from_utf8(youtube_dl.stdout)
-        .map_err(|_| SerenityError::Other("Failed to read output of youtube-dl"))?;
+    let exit_status = youtube_dl.wait()?;
 
-    return Ok(serde_json::from_str(&json_result)?);
+    if !exit_status.success() {
+        let mut stderr = youtube_dl.stderr.ok_or(io::Error::new(
+            io::ErrorKind::Other,
+            "Failed to get the stderr of youtube_dl",
+        ))?;
+
+        let mut string = String::new();
+        stderr.read_to_string(&mut string)?;
+
+        return Err(YtdlError::Runtime(string));
+    }
+
+    let mut stdout = youtube_dl.stdout.ok_or(io::Error::new(
+        io::ErrorKind::Other,
+        "Failed to get the stderr of youtube_dl",
+    ))?;
+
+    let mut string = String::new();
+    stdout.read_to_string(&mut string)?;
+
+    return Ok(serde_json::from_str(&string)?);
 }
 
 /// Search youtube for the search term
-pub fn search(term: &str, max_results: u8) -> serenity::Result<Box<[YtdlMetadata]>> {
-    let youtube_dl = Command::new("youtube-dl")
-        .args(&["-j",  "--no-playlist", "--ignore-config", &format!("ytsearch{}:{}", max_results, term)])
-        .output()
+pub fn search(term: &str, max_results: u8) -> Result<Box<[YtdlMetadata]>> {
+    let mut youtube_dl = Command::new("youtube-dl")
+        .args(&[
+            "-j",
+            "--no-playlist",
+            "--ignore-config",
+            &format!("ytsearch{}:\"{}\"", max_results, term),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(map_ytdl_spawn_err)?;
 
-    let json_result = String::from_utf8(youtube_dl.stdout)
-        .map_err(|_| SerenityError::Other("Failed to read output of youtube-dl"))?;
+    let exit_status = youtube_dl.wait()?;
 
-    return Ok(serde_json::from_str(&format!("[{}]", json_result))?);
+    if !exit_status.success() {
+        let mut stderr = youtube_dl.stderr.ok_or(io::Error::new(
+            io::ErrorKind::Other,
+            "Failed to get the stderr of youtube_dl",
+        ))?;
+
+        let mut string = String::new();
+        stderr.read_to_string(&mut string)?;
+
+        return Err(YtdlError::Runtime(string));
+    }
+
+    let mut stdout = youtube_dl.stdout.ok_or(io::Error::new(
+        io::ErrorKind::Other,
+        "Failed to get the stderr of youtube_dl",
+    ))?;
+
+    let mut string = String::new();
+    stdout.read_to_string(&mut string)?;
+
+    return Ok(serde_json::from_str(&format!("[{}]", string))?);
 }

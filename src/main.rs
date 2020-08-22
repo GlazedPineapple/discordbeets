@@ -1,13 +1,14 @@
 use dotenv::dotenv;
 use serenity::{
     client::{bridge::voice::ClientVoiceManager, Client, Context, EventHandler},
-    framework::StandardFramework,
+    framework::{standard::CommandError, StandardFramework},
     model::{
         gateway::{Activity, Ready},
         id::UserId,
         prelude::OnlineStatus,
     },
-    prelude::*, utils::Color,
+    prelude::*,
+    utils::Color,
 };
 use std::{env, sync::Arc};
 
@@ -62,18 +63,20 @@ fn main() {
             .help(&HELP)
             .after(|ctx, msg, cmd_name, error| {
                 // Print out error if/when it occurs
-                if let Err(why) = error {
+                if let Err(CommandError(why)) = error {
                     println!("Error in {}: {:?}", cmd_name, why);
-                    msg.channel_id.send_message(&ctx, |m| {
-                        m.embed(|e| {
-                            e.title(format!("Error in `{}`", cmd_name))
-                                .description(format!(
-                                    "Encountered an error while executing `{}`.\n```rs\n{:?}```",
-                                    cmd_name, why
+                    msg.channel_id
+                        .send_message(&ctx, |m| {
+                            m.embed(|e| {
+                                e.title(format!(
+                                    "Command `{}` failed",
+                                    cmd_name
                                 ))
+                                .description(format!("```\n{}```", why))
                                 .color(Color::DARK_RED)
+                            })
                         })
-                    }).ok();
+                        .ok();
                 }
             }),
     );

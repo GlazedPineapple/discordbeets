@@ -1,13 +1,15 @@
 use crate::ytdl;
 use crate::VoiceManager;
+use chrono::prelude::*;
 use serenity::{
     framework::standard::{
         help_commands,
         macros::{command, group, help},
-        Args, CommandGroup, CommandResult, HelpOptions,
+        Args, CommandError, CommandGroup, CommandResult, HelpOptions,
     },
     model::{channel::Message, id::UserId, misc::Mentionable},
     prelude::Context,
+    utils::Color,
 };
 use std::collections::HashSet;
 
@@ -52,7 +54,6 @@ fn stop(ctx: &mut Context, msg: &Message) -> CommandResult {
             return Ok(());
         }
     };
-    
     if let Some(handler) = manager.get_mut(guild_id) {
         handler.stop();
     }
@@ -159,23 +160,14 @@ fn leave(ctx: &mut Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-#[usage = "!play <song url>"]
+#[usage = "!play <song url | song title>"]
 #[example = "!play https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
-#[num_args(1)]
+#[min_args(1)]
 #[only_in(guild)]
 /// Plays a song
 fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
-    // Get the url to play
-    let url = match args.rest() {
-        url if url.starts_with("http") => url,
-        // url => youtube search here to get url,
-        _ => {
-            msg.channel_id
-                .say(&ctx, "Must provide a valid URL to video or audio")?;
-
-            return Ok(());
-        }
-    };
+    // Get the args
+    let arg = args.rest();
 
     // Get the guild id from the message
     let guild_id = match msg.guild_id {
@@ -198,22 +190,91 @@ fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
     let mut manager = manager_lock.lock();
 
     if let Some(handler) = manager.get_mut(guild_id) {
-        let source = match ytdl::stream_url(url) {
-            Ok(source) => source,
-            Err(why) => {
-                eprintln!("Error with youtube-dl: {:?}", why);
+        handler.stop();
 
-                msg.channel_id.say(&ctx, "Error loading URL")?;
+        // Detect if given a url or given a search term
+        if arg.starts_with("http") {
+            let metadata = match ytdl::metadata(arg) {
+                Ok(meta) => meta,
+                Err(why) => {
+                    eprintln!("Encountered an error while fetching the metadata: {}", why);
+                    return Err(CommandError(format!("{}", why)));
+                }
+            };
 
+            let source = match ytdl::stream_url(arg) {
+                Ok(source) => source,
+                Err(why) => {
+                    eprintln!("Encountered an error while streaming the audio: {}", why);
+                    return Err(CommandError(format!("{}", why)));
+                }
+            };
+            handler.play(source);
+            // let audio = handler.play_returning(source);
+            // audio.lock().volume(0.5);
+
+            msg.channel_id
+                .send_message(&ctx, |m| {
+                    m.embed(|e| {
+                        e.title(format!("Playing: {}", metadata.fulltitle))
+                            .description(&metadata.description)
+                            .url(&metadata.webpage_url)
+                            .timestamp(
+                                &Utc.datetime_from_str(&metadata.upload_date, "%Y%m%d")
+                                    .unwrap_or_else(|_| Utc::now()),
+                            )
+                            .thumbnail(&metadata.thumbnail)
+                            .author(|a| a.name(&metadata.uploader).url(&metadata.uploader_url))
+                            .field("duration", &metadata.duration, true)
+                            .field("view_count", &metadata.view_count, true)
+                            .color(Color::DARK_GREEN)
+                    })
+                })
+                .ok();
+        } else {
+            let results = match ytdl::search(arg, 1) {
+                Ok(r) => r,
+                Err(why) => {
+                    eprintln!("Encountered an error while searching for the song: {}", why);
+                    return Err(CommandError(format!("{}", why)));
+                }
+            };
+
+            if results.len() == 0 {
+                msg.channel_id.say(&ctx, "No results")?;
                 return Ok(());
             }
-        };
 
-        handler.play(source);
-        // let audio = handler.play_returning(source);
-        // audio.lock().volume(0.5);
+            let metadata = &results[0];
 
-        msg.channel_id.say(&ctx, "Playing song")?;
+            let source = match ytdl::stream_url(&metadata.webpage_url) {
+                Ok(source) => source,
+                Err(why) => {
+                    eprintln!("Encountered an error while streaming the audio: {}", why);
+                    return Err(CommandError(format!("{}", why)));
+                }
+            };
+            handler.play(source);
+
+            msg.channel_id
+                .send_message(&ctx, |m| {
+                    m.embed(|e| {
+                        e.title(format!("Playing: {}", metadata.fulltitle))
+                            .description(&metadata.description)
+                            .url(&metadata.webpage_url)
+                            .timestamp(
+                                &Utc.datetime_from_str(&metadata.upload_date, "%Y%m%d")
+                                    .unwrap_or_else(|_| Utc::now()),
+                            )
+                            .thumbnail(&metadata.thumbnail)
+                            .author(|a| a.name(&metadata.uploader).url(&metadata.uploader_url))
+                            .field("duration", &metadata.duration, true)
+                            .field("view_count", &metadata.view_count, true)
+                            .color(Color::DARK_GREEN)
+                    })
+                })
+                .ok();
+        }
     } else {
         msg.channel_id.say(&ctx, "Not in a voice channel")?;
     }

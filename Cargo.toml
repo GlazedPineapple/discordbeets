@@ -8,8 +8,10 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serenity = { version = "0.8.6", features = ["cache", "framework", "standard_framework", "voice"] }
+serenity = { version = "0.8.7", features = ["cache", "framework", "standard_framework", "voice"] }
 dotenv = "0.15.0"
-ctrlc = { version = "3.1.4", features = ["termination"] }
-serde = { version = "1.0.110", features = ["derive"] }
-serde_json = "1.0.53"
+ctrlc = { version = "3.1.6", features = ["termination"] }
+serde = { version = "1.0.115", features = ["derive"] }
+serde_json = "1.0.57"
+thiserror = "1.0.20"
+chrono = "0.4.15"
