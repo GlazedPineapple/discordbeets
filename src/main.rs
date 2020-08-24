@@ -68,12 +68,9 @@ fn main() {
                     msg.channel_id
                         .send_message(&ctx, |m| {
                             m.embed(|e| {
-                                e.title(format!(
-                                    "Command `{}` failed",
-                                    cmd_name
-                                ))
-                                .description(format!("```\n{}```", why))
-                                .color(Color::DARK_RED)
+                                e.title(format!("Command `{}` failed", cmd_name))
+                                    .description(format!("```\n{}```", why))
+                                    .color(Color::DARK_RED)
                             })
                         })
                         .ok();

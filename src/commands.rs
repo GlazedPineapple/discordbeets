@@ -217,7 +217,6 @@ fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
                 .send_message(&ctx, |m| {
                     m.embed(|e| {
                         e.title(format!("Playing: {}", metadata.fulltitle))
-                            .description(&metadata.description)
                             .url(&metadata.webpage_url)
                             .timestamp(
                                 &Utc.datetime_from_str(&metadata.upload_date, "%Y%m%d")
@@ -260,7 +259,6 @@ fn play(ctx: &mut Context, msg: &Message, args: Args) -> CommandResult {
                 .send_message(&ctx, |m| {
                     m.embed(|e| {
                         e.title(format!("Playing: {}", metadata.fulltitle))
-                            .description(&metadata.description)
                             .url(&metadata.webpage_url)
                             .timestamp(
                                 &Utc.datetime_from_str(&metadata.upload_date, "%Y%m%d")

@@ -104,7 +104,8 @@ pub fn metadata(url: &str) -> Result<YtdlMetadata> {
     let mut youtube_dl = Command::new("youtube-dl")
         .args(&["-j", "--no-playlist", "--ignore-config", url])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::null())
+        .stdin(Stdio::null())
         .spawn()
         .map_err(map_ytdl_spawn_err)?;
 
@@ -124,7 +125,7 @@ pub fn metadata(url: &str) -> Result<YtdlMetadata> {
 
     let mut stdout = youtube_dl.stdout.ok_or(io::Error::new(
         io::ErrorKind::Other,
-        "Failed to get the stderr of youtube_dl",
+        "Failed to get the stdout of youtube_dl",
     ))?;
 
     let mut string = String::new();
